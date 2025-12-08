@@ -97,6 +97,7 @@ class Vehicle {
   }
 
   show() {
+    
     stroke(255);
     strokeWeight(2);
     fill(255);
@@ -109,6 +110,16 @@ class Vehicle {
 
     triangle(-this.r, -this.r / 2, -this.r, this.r / 2, this.r, 0);
     pop();
+    /*
+   push();
+   // on dessine le vehicule comme un cercle
+   fill("blue");
+   stroke("white");
+   strokeWeight(2);
+   translate(this.pos.x, this.pos.y);
+   circle(0, 0, this.r * 2);  
+   pop();
+   */
   }
 
   edges() {
