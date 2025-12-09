@@ -27,7 +27,7 @@ class Vehicle {
     // vitesse maximale du véhicule
     this.maxSpeed = 4;
     // force maximale appliquée au véhicule
-    this.maxForce = 0.1;
+    this.maxForce = 0.2;
     this.color = "white";
     // à peu près en secondes
     this.dureeDeVie = 5;
@@ -43,7 +43,19 @@ class Vehicle {
     this.path = [];
     this.pathMaxLength = 30;
 
+    // Pour wander
+    // pour comportement wander
+    this.distanceCercle = 150;
+    this.wanderRadius = 50;
+    this.wanderTheta = -Math.PI / 2;
+    this.displaceRange = 0.3;
 
+    // Poids pour les comportements
+    this.seekWeight = 0.2;
+    this.avoidWeight = 3;
+    this.separateWeight = 0.2;
+    this.boundariesWeight = 3;
+    this.wanderForceWeight = 0;
   }
 
   // on fait une méthode applyBehaviors qui applique les comportements
@@ -53,20 +65,25 @@ class Vehicle {
     let seekForce = this.arrive(target);
     let avoidForce = this.avoid(obstacles);
     //let separateForce = this.separate(vehicules);
-    // let boudariesForce = this.boundaries();
+    let boudariesForce = this.boundaries(0, 0, width, height, 50);
+    let wanderForce = this.wander();
 
-    seekForce.mult(0.2);
-    avoidForce.mult(3);
-    //separateForce.mult(0.2);
-    // boudariesForce.mult(3);
+    seekForce.mult(this.seekWeight);
+    avoidForce.mult(this.avoidWeight);
+    //separateForce.mult(this.separateWeight);
+    boudariesForce.mult(this.boundariesWeight);
+    wanderForce.mult(this.wanderForceWeight);
 
     this.applyForce(seekForce);
     this.applyForce(avoidForce);
     //this.applyForce(separateForce);
-    // this.applyForce(boudariesForce);
+    this.applyForce(boudariesForce);
+    this.applyForce(wanderForce);
   }
 
   avoid(obstacles) {
+    push();
+
     // TODO
     let distanceAhead = 50;
     // il regarde par exemple 20 frames devant lui (le point "ahead)
@@ -96,26 +113,38 @@ class Vehicle {
     let obstacleLePlusProche2 = this.getClosestObstacle(pointAuBoutDeAhead2, obstacles);
     // on prend aussi le vaisseau
     let obstaceLePlusProche3 = this.getClosestObstacle(this.pos, obstacles);
+    let vehiculeLePlusProche = this.getVehiculeLePlusProche(vehicules);
 
     let distance = pointAuBoutDeAhead.dist(obstacleLePlusProche.pos);
     let distance2 = pointAuBoutDeAhead2.dist(obstacleLePlusProche2.pos);
     let distance3 = this.pos.dist(obstaceLePlusProche3.pos);
-
+    let distance4;
+    if(vehiculeLePlusProche!==undefined) {
+      distance4 = this.pos.dist(vehiculeLePlusProche.pos);
+    } else {
+      distance4 = Infinity;
+    }
 
     let pointUtilise;
-    if (distance < distance2 && distance < distance3) {
+    if (distance <= distance2 && distance <= distance3 && distance <= distance4) {
       // on utilise ahead
       pointUtilise = pointAuBoutDeAhead;
-    } else if (distance2 < distance && distance2 < distance3) {
+    } else if (distance2 <= distance && distance2 <= distance3 && distance2 < distance4) {
       // on utilise ahead2
       pointUtilise = pointAuBoutDeAhead2;
       obstacleLePlusProche = obstacleLePlusProche2;
       distance = distance2;
-    } else {
+    } else if (distance3 <= distance && distance3 <= distance2 && distance3 <= distance4) {
       // on utilise la position du vaisseau
       pointUtilise = this.pos;
       obstacleLePlusProche = obstaceLePlusProche3;
       distance = distance3;
+    } else {
+      // l'obstacle le plus proche est un véhicule
+      // on utilise la position du vaisseau
+      pointUtilise = this.pos;
+      obstacleLePlusProche = vehiculeLePlusProche;
+      distance = distance4;
     }
 
     if (Vehicle.debug) {
@@ -150,6 +179,8 @@ class Vehicle {
       force = createVector(0, 0);
     }
 
+    pop();
+    
     return force;
   }
 
@@ -228,6 +259,81 @@ class Vehicle {
       // pas de collision possible
       return createVector(0, 0);
     }
+  }
+
+  wander() {
+    // point devant le véhicule, centre du cercle
+    let pointDevant = this.vel.copy();
+    pointDevant.setMag(this.distanceCercle);
+    pointDevant.add(this.pos);
+
+    push();
+    if (Vehicle.debug) {
+      // on dessine le cercle en rouge
+      // on le dessine sous la forme d'une petit cercle rouge
+      fill("red");
+      noStroke();
+      circle(pointDevant.x, pointDevant.y, 8);
+
+      // on dessine le cercle autour
+      // Cercle autour du point
+      noFill();
+      stroke(255);
+      circle(pointDevant.x, pointDevant.y, this.wanderRadius * 2);
+
+      // on dessine une ligne qui relie le vaisseau à ce point
+      // c'est la ligne blanche en face du vaisseau
+      strokeWeight(2);
+      // ligne en pointillés
+      stroke(255, 255, 255, 80);
+      drawingContext.setLineDash([5, 15]);
+      stroke(255, 255, 255, 80);
+      line(this.pos.x, this.pos.y, pointDevant.x, pointDevant.y);
+
+    }
+
+    // On va s'occuper de calculer le point vert SUR LE CERCLE
+    // il fait un angle wanderTheta avec le centre du cercle
+    // l'angle final par rapport à l'axe des X c'est l'angle du vaisseau
+    // + cet angle
+    let theta = this.wanderTheta + this.vel.heading();
+    let pointSurLeCercle = createVector(0, 0);
+    pointSurLeCercle.x = this.wanderRadius * cos(theta);
+    pointSurLeCercle.y = this.wanderRadius * sin(theta);
+
+    // on rajoute ces distances au point rouge au centre du cercle
+    pointSurLeCercle.add(pointDevant);
+
+    if (Vehicle.debug) {
+      // on le dessine sous la forme d'un cercle vert
+      fill("green");
+      noStroke();
+      circle(pointSurLeCercle.x, pointSurLeCercle.y, 16);
+
+      // on dessine le vecteur qui va du centre du vaisseau
+      // à ce point vert sur le cercle
+      stroke("yellow");
+      strokeWeight(1);
+      // pas en pointillés mais une ligne pleine
+      drawingContext.setLineDash([]);
+      line(this.pos.x, this.pos.y, pointSurLeCercle.x, pointSurLeCercle.y);
+    }
+
+    // entre chaque image on va déplacer aléatoirement
+    // le point vert en changeant un peu son angle...
+    this.wanderTheta += random(-this.displaceRange, this.displaceRange);
+
+    // D'après l'article, la force est égale au vecteur qui va du
+    // centre du vaisseau, à ce point vert. On va aussi la limiter
+    // à this.maxForce
+    // REMPLACER LA LIGNE SUIVANTE !
+    let force = p5.Vector.sub(pointSurLeCercle, this.pos);
+    // On met la force à maxForce
+    force.setMag(this.maxForce);
+    pop();
+
+    // et on la renvoie au cas où....
+    return force;
   }
 
   // Exerce une force renvoyant vers le centre du canvas si le véhicule s'approche
